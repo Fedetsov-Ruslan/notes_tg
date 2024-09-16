@@ -34,7 +34,7 @@ class Registration(StatesGroup):
 async def start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     current_user = await orm_current_user(callback.from_user.id, session)
     if current_user is None:
-        await callback.answer("У вас уже есть акаунт?",reply_markup=main_inline_kbds())
+        await callback.answer("У вас уже есть акаунт?",reply_markup=get_callback_btns(btns={'Да, я хочу авторизоваться':'Logining', 'Нет, я хочу зарегистрироваться':'Registration'}))
     else:
         await callback.answer("Что хотите сделать?",reply_markup=main_inline_kbds())
         await state.update_data(user_id=current_user)
