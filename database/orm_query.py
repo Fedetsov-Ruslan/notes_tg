@@ -57,7 +57,7 @@ async def orm_get_records(current_user: int, session: AsyncSession):
     
 async def orm_add_record(data: dict, session: AsyncSession):
     current_user = data['user_id']
-    new_tags = data["tags"].lstrip('#').split('#')
+    new_tags = data["tags"].lstrip('#').strip().split('#')
     new_record = Record(
         auther = current_user,
         title = data["title"],
@@ -77,3 +77,27 @@ async def orm_add_record(data: dict, session: AsyncSession):
     for tag_id in tags_id:
         session.add(TagsRecord(tag_id=tag_id, record_id=new_record.id))
     await session.commit()
+
+async def orm_search_by_tags(tags:list, session: AsyncSession):
+    query = select(Record).join(TagsRecord).join(Tag).where(Tag.tag_name.in_(tags))
+    result = await session.execute(query)
+    records = result.scalars().all()
+    record_id_list = [rec.id for rec in records]
+    query_tags = (select(Tag.tag_name, TagsRecord.record_id)
+                  .join(TagsRecord, TagsRecord.tag_id == Tag.id)
+                  .where(TagsRecord.record_id.in_(record_id_list)))
+    result = await session.execute(query_tags)
+    tags =  result.all()  
+    tags_by_record = {}
+    for tag in tags:
+        if tag[1] not in tags_by_record:
+            tags_by_record[tag[1]] = []
+        tags_by_record[tag[1]].append(tag[0])
+    return [{
+        "id": rec.id,
+        "auther": rec.auther,
+        "title": rec.title,
+        "content": rec.content,
+        "tags": tags_by_record[rec.id],
+        "created_at": rec.created_at
+    } for rec in records]

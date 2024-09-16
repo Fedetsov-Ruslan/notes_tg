@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from database.orm_query import add_usertg, orm_add_record, orm_current_user, orm_get_records, orm_login_user
+from database.orm_query import add_usertg, orm_add_record, orm_current_user, orm_get_records, orm_login_user, orm_search_by_tags
 from kbds.inline import get_callback_btns
 
 user_private_router = Router()
@@ -21,6 +21,9 @@ class AddRecord(StatesGroup):
     title = State()
     content = State()
     tags = State()
+
+class SearchByTags(StatesGroup):
+    search_tags = State()
 
 @user_private_router.message(CommandStart())
 async def start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
@@ -111,10 +114,40 @@ async def tags(message: Message, state: FSMContext):
 
 @user_private_router.message(AddRecord.tags)
 async def new_record(message: Message, state: FSMContext, session: AsyncSession):
-    await state.update_data(tags=message.text)
+    await state.update_data(tags=message.text.strip())
     data = await state.get_data()
     await orm_add_record(data, session)
     await message.answer("Запись добавлена", reply_markup=get_callback_btns(btns={           
+                "Мои записи": "MyRecords",
+                "Добавить запись": "AddRecord",
+                "Поиск по тегам": "SearchByTags",
+            }, sizes=(1,)))
+    current_user = data.get('user_id')
+    await state.clear()
+    await state.update_data(user_id=current_user)
+    
+@user_private_router.callback_query(F.data.startswith('SearchByTags'))
+async def write_tags(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите тег или теги, через решетку, наприме #программирование#дизайн ")
+    
+    await state.set_state(SearchByTags.search_tags)
+
+@user_private_router.message(SearchByTags.search_tags)
+async def search_by_tags(message: Message, state: FSMContext, session: AsyncSession):
+    await state.update_data(search_tags=message.text)
+    data = await state.get_data()
+    tags = data.get('search_tags').lstrip('#').strip().split('#')
+    records = await orm_search_by_tags(tags, session)
+    if not records:
+        await message.answer("Ничего не нашли",reply_markup=get_callback_btns(btns={           
+                "Мои записи": "MyRecords",
+                "Добавить запись": "AddRecord",
+                "Поиск по тегам": "SearchByTags",
+            }, sizes=(1,)))
+    else:
+        for record in records:
+            await message.answer(f"{record['title']}\n{record['content']}\n #{'# '.join(record['tags'])}\n{record['created_at']}")
+        await message.answer("Что хотите сделать?",reply_markup=get_callback_btns(btns={           
                 "Мои записи": "MyRecords",
                 "Добавить запись": "AddRecord",
                 "Поиск по тегам": "SearchByTags",
