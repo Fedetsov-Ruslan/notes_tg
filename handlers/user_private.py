@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 from database.orm_query import add_usertg, orm_add_record, orm_current_user, orm_get_records, orm_login_user, orm_register_user, orm_search_by_tags
-from kbds.inline import get_callback_btns
+from kbds.inline import get_callback_btns, main_inline_kbds
 
 user_private_router = Router()
 
@@ -34,16 +34,9 @@ class Registration(StatesGroup):
 async def start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     current_user = await orm_current_user(callback.from_user.id, session)
     if current_user is None:
-        await callback.answer("У вас уже есть акаунт?",reply_markup=get_callback_btns(btns={
-            'Да, я хочу войти': 'Logining',
-            'Нет, я хочу зарегистрироваться': 'Registration',
-        }, sizes=(2,)))
+        await callback.answer("У вас уже есть акаунт?",reply_markup=main_inline_kbds())
     else:
-        await callback.answer("Что хотите сделать?",reply_markup=get_callback_btns(btns={
-            "Мои записи": "MyRecords",
-            "Добавить запись": "AddRecord",
-            "Поиск по тегам": "SearchByTags",
-        }, sizes=(1,)))
+        await callback.answer("Что хотите сделать?",reply_markup=main_inline_kbds())
         await state.update_data(user_id=current_user)
 
 # Авторизация пользователя
@@ -75,11 +68,7 @@ async def password(message: Message, state: FSMContext, session: AsyncSession):
     else:
         print(current_user, message.from_user.id)
         await add_usertg(current_user, message.from_user.id, session)
-        await message.answer("Вы вошли в аккаунт",reply_markup=get_callback_btns(btns={            
-            "Мои записи": "MyRecords",
-            "Добавить запись": "AddRecord",
-            "Поиск по тегам": "SearchByTags",
-        }, sizes=(1,)))
+        await message.answer("Вы вошли в аккаунт",reply_markup=main_inline_kbds())
         await state.update_data(user_id=current_user)
 
 # Получение записей пользователя
@@ -89,19 +78,11 @@ async def get_my_records(callback: CallbackQuery, session: AsyncSession, state: 
     current_user = data.get('user_id')
     records = await orm_get_records(current_user, session)
     if not records:
-        await callback.message.answer("У вас нет записей",reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+        await callback.message.answer("У вас нет записей",reply_markup=main_inline_kbds())
     else:
         for record in records:
             await callback.message.answer(f"{record['title']}\n{record['content']}\n #{'# '.join(record['tags'])}\n{record['created_at']}")
-        await callback.message.answer("Что хотите сделать?",reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+        await callback.message.answer("Что хотите сделать?",reply_markup=main_inline_kbds())
 
 # Добавление записи пользователем    
 @user_private_router.callback_query(F.data.startswith('AddRecord'))
@@ -126,11 +107,7 @@ async def new_record(message: Message, state: FSMContext, session: AsyncSession)
     await state.update_data(tags=message.text.strip())
     data = await state.get_data()
     await orm_add_record(data, session)
-    await message.answer("Запись добавлена", reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+    await message.answer("Запись добавлена", reply_markup=main_inline_kbds())
     current_user = data.get('user_id')
     await state.clear()
     await state.update_data(user_id=current_user)
@@ -149,19 +126,11 @@ async def search_by_tags(message: Message, state: FSMContext, session: AsyncSess
     tags = data.get('search_tags').lstrip('#').strip().split('#')
     records = await orm_search_by_tags(tags, session)
     if not records:
-        await message.answer("Ничего не нашли",reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+        await message.answer("Ничего не нашли",reply_markup=main_inline_kbds())
     else:
         for record in records:
             await message.answer(f"{record['title']}\n{record['content']}\n #{'# '.join(record['tags'])}\n{record['created_at']}")
-        await message.answer("Что хотите сделать?",reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+        await message.answer("Что хотите сделать?",reply_markup=main_inline_kbds())
 
 #регистрация пользователя
 @user_private_router.callback_query(F.data.startswith('Registration'))
@@ -188,10 +157,6 @@ async def registration(message: Message, state: FSMContext, session: AsyncSessio
     await message.delete()
     current_user = await orm_register_user(data, session)
     await add_usertg(current_user, message.from_user.id, session)
-    await message.answer("Регистрация прошла успешно",reply_markup=get_callback_btns(btns={           
-                "Мои записи": "MyRecords",
-                "Добавить запись": "AddRecord",
-                "Поиск по тегам": "SearchByTags",
-            }, sizes=(1,)))
+    await message.answer("Регистрация прошла успешно",reply_markup=main_inline_kbds())
     await state.clear()
     await state.update_data(user_id=current_user)

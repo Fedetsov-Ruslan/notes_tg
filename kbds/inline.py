@@ -10,3 +10,10 @@ def get_callback_btns(
     for text, data in btns.items():
         keyboard.add(InlineKeyboardButton(text=text, callback_data=data))
     return keyboard.adjust(*sizes).as_markup()
+
+def main_inline_kbds():
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(text="Мои записи", callback_data="MyRecords"))
+    keyboard.add(InlineKeyboardButton(text="Добавить запись", callback_data="AddRecord"))
+    keyboard.add(InlineKeyboardButton(text="Поиск по тегам", callback_data="SearchByTags"))
+    return keyboard.as_markup()
