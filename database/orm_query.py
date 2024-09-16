@@ -4,7 +4,7 @@ from fastapi_users.password import Argon2Hasher
 
 from database.models import Record, Tag, TagsRecord, User, UserTg
 
-
+# проверка связан ли ТГ с какой либо записью пользователя
 async def orm_current_user(user: int, session: AsyncSession):
     query = select(UserTg).where(UserTg.tg_id == user)
     result = await session.execute(query)
@@ -14,7 +14,8 @@ async def orm_current_user(user: int, session: AsyncSession):
         return None
     else:
         return user.user_id
-    
+
+# Авторизация пользователя. Возвращает ID пользователя если введины верные логин и пароль.  
 async def orm_login_user(email: str, password: str, session: AsyncSession):
     query = select(User).where(User.email == email)
     result = await session.execute(query)
@@ -25,12 +26,14 @@ async def orm_login_user(email: str, password: str, session: AsyncSession):
         return user.id
     else:
         return None
-    
+
+# Связь пользователя с ТГ
 async def add_usertg(user: int, tg: int, session: AsyncSession):
     user = UserTg(user_id=user, tg_id=tg)
     session.add(user)
     await session.commit()
 
+# Возвращает все записи пользователя
 async def orm_get_records(current_user: int, session: AsyncSession):
     query_records = select(Record).where(Record.auther == current_user)
     result = await session.execute(query_records)
@@ -54,7 +57,8 @@ async def orm_get_records(current_user: int, session: AsyncSession):
         "tags": tags_by_record[rec.id],
         "created_at": rec.created_at
     } for rec in recodrds]
-    
+
+# Добавление записи
 async def orm_add_record(data: dict, session: AsyncSession):
     current_user = data['user_id']
     new_tags = data["tags"].lstrip('#').strip().split('#')
@@ -78,6 +82,7 @@ async def orm_add_record(data: dict, session: AsyncSession):
         session.add(TagsRecord(tag_id=tag_id, record_id=new_record.id))
     await session.commit()
 
+# Поиск записей по тегам
 async def orm_search_by_tags(tags:list, session: AsyncSession):
     query = select(Record).join(TagsRecord).join(Tag).where(Tag.tag_name.in_(tags))
     result = await session.execute(query)
@@ -101,3 +106,10 @@ async def orm_search_by_tags(tags:list, session: AsyncSession):
         "tags": tags_by_record[rec.id],
         "created_at": rec.created_at
     } for rec in records]
+
+async def orm_register_user(data: dict, session: AsyncSession):
+    new_user = User(email=data['reg_email'], hashed_password=Argon2Hasher().hash(data['reg_password']), username=data['reg_username'])
+    session.add(new_user)
+    await session.commit()
+    await session.refresh(new_user)
+    return new_user.id

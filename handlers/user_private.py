@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from database.orm_query import add_usertg, orm_add_record, orm_current_user, orm_get_records, orm_login_user, orm_search_by_tags
+from database.orm_query import add_usertg, orm_add_record, orm_current_user, orm_get_records, orm_login_user, orm_register_user, orm_search_by_tags
 from kbds.inline import get_callback_btns
 
 user_private_router = Router()
@@ -25,27 +25,31 @@ class AddRecord(StatesGroup):
 class SearchByTags(StatesGroup):
     search_tags = State()
 
+class Registration(StatesGroup):
+    reg_email = State()
+    reg_username = State()
+    reg_password = State()
+
 @user_private_router.message(CommandStart())
 async def start(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     current_user = await orm_current_user(callback.from_user.id, session)
     if current_user is None:
         await callback.answer("У вас уже есть акаунт?",reply_markup=get_callback_btns(btns={
             'Да, я хочу войти': 'Logining',
-            'Нет, я хочу зарегистрироваться': 'Registring',
+            'Нет, я хочу зарегистрироваться': 'Registration',
         }, sizes=(2,)))
     else:
         await callback.answer("Что хотите сделать?",reply_markup=get_callback_btns(btns={
-            
             "Мои записи": "MyRecords",
             "Добавить запись": "AddRecord",
             "Поиск по тегам": "SearchByTags",
         }, sizes=(1,)))
         await state.update_data(user_id=current_user)
 
+# Авторизация пользователя
 @user_private_router.callback_query(F.data.startswith('Logining'))
 async def loging(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.message.answer("Введите свою почту")
-
     await state.set_state(Loging.email)
 
 @user_private_router.message(Loging.email)
@@ -71,21 +75,25 @@ async def password(message: Message, state: FSMContext, session: AsyncSession):
     else:
         print(current_user, message.from_user.id)
         await add_usertg(current_user, message.from_user.id, session)
-        await message.answer("Вы вошли в аккаунт",reply_markup=get_callback_btns(btns={
-            
+        await message.answer("Вы вошли в аккаунт",reply_markup=get_callback_btns(btns={            
             "Мои записи": "MyRecords",
             "Добавить запись": "AddRecord",
             "Поиск по тегам": "SearchByTags",
         }, sizes=(1,)))
         await state.update_data(user_id=current_user)
 
+# Получение записей пользователя
 @user_private_router.callback_query(F.data.startswith('MyRecords'))
 async def get_my_records(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     data = await state.get_data()
     current_user = data.get('user_id')
     records = await orm_get_records(current_user, session)
     if not records:
-        await callback.message.answer("У вас нет записей")
+        await callback.message.answer("У вас нет записей",reply_markup=get_callback_btns(btns={           
+                "Мои записи": "MyRecords",
+                "Добавить запись": "AddRecord",
+                "Поиск по тегам": "SearchByTags",
+            }, sizes=(1,)))
     else:
         for record in records:
             await callback.message.answer(f"{record['title']}\n{record['content']}\n #{'# '.join(record['tags'])}\n{record['created_at']}")
@@ -94,7 +102,8 @@ async def get_my_records(callback: CallbackQuery, session: AsyncSession, state: 
                 "Добавить запись": "AddRecord",
                 "Поиск по тегам": "SearchByTags",
             }, sizes=(1,)))
-    
+
+# Добавление записи пользователем    
 @user_private_router.callback_query(F.data.startswith('AddRecord'))
 async def title(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите название записи")
@@ -125,7 +134,8 @@ async def new_record(message: Message, state: FSMContext, session: AsyncSession)
     current_user = data.get('user_id')
     await state.clear()
     await state.update_data(user_id=current_user)
-    
+
+# Поиск записей по тегам    
 @user_private_router.callback_query(F.data.startswith('SearchByTags'))
 async def write_tags(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("Введите тег или теги, через решетку, наприме #программирование#дизайн ")
@@ -152,4 +162,36 @@ async def search_by_tags(message: Message, state: FSMContext, session: AsyncSess
                 "Добавить запись": "AddRecord",
                 "Поиск по тегам": "SearchByTags",
             }, sizes=(1,)))
-        
+
+#регистрация пользователя
+@user_private_router.callback_query(F.data.startswith('Registration'))
+async def reg_email(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer("Введите свою почту")
+    await state.set_state(Registration.reg_email)  
+
+@user_private_router.message(Registration.reg_email)
+async def reg_username(message: Message, state: FSMContext):
+    await state.update_data(reg_email=message.text)  
+    await message.answer("Введите свой nickname")   
+    await state.set_state(Registration.reg_username)
+
+@user_private_router.message(Registration.reg_username)
+async def reg_password(message: Message, state: FSMContext):
+    await state.update_data(reg_username=message.text)
+    await message.answer("Введите свой пароль")
+    await state.set_state(Registration.reg_password)
+
+@user_private_router.message(Registration.reg_password)
+async def registration(message: Message, state: FSMContext, session: AsyncSession):
+    await state.update_data(reg_password=message.text)
+    data = await state.get_data()
+    await message.delete()
+    current_user = await orm_register_user(data, session)
+    await add_usertg(current_user, message.from_user.id, session)
+    await message.answer("Регистрация прошла успешно",reply_markup=get_callback_btns(btns={           
+                "Мои записи": "MyRecords",
+                "Добавить запись": "AddRecord",
+                "Поиск по тегам": "SearchByTags",
+            }, sizes=(1,)))
+    await state.clear()
+    await state.update_data(user_id=current_user)
