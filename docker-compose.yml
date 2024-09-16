@@ -1,0 +1,32 @@
+services:
+  bot:
+    image: notes_tg
+    container_name: 'notes_tg'
+    ports:
+      - "8001:8001"
+
+    environment:  
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}
+    depends_on:
+     - db
+    volumes:
+      - .:/app
+    networks:
+      - messages
+  
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    
+    networks:
+      - messages
+
+
+networks:
+  messages:
+    driver: bridge
