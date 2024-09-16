@@ -2,7 +2,7 @@ import os
 import asyncio
 import aiohttp
 
-
+from middlewares.db import DataBaseSession
 from database.engine import drop_db, session_maker, create_db
 from aiogram.types import BotCommandScopeAllPrivateChats
 from aiogram import Bot, Dispatcher
@@ -29,7 +29,8 @@ async def on_shutdown():
 
 async def main():
     dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)    
+    dp.shutdown.register(on_shutdown) 
+    dp.update.middleware(DataBaseSession(session_poll=session_maker))   
 
     try:
     #   await bot.set_my_commands(commands=private, scope=BotCommandScopeAllPrivateChats())
